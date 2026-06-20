@@ -42,7 +42,6 @@ class Bloco:
 
 
 class BlockchainAuditoria:
-    
     def __init__(self):
         self.cadeia: List[Bloco] = []
         self._carregar_ou_criar_cadeia()
@@ -218,6 +217,161 @@ class BlockchainAuditoria:
             print(f"Relatório salvo em: {arquivo}")
         
         return json.dumps(relatorio, indent=2, default=str)
+
+        def validar_integridade_avancada(self) -> Dict:
+        """
+        Validação avançada da blockchain com relatório detalhado
+        
+        Returns:
+            Dicionário com status, erros e estatísticas
+        """
+        resultado = {
+            'status': 'INTEGRO',
+            'total_blocos': len(self.cadeia),
+            'erros': [],
+            'alertas': [],
+            'estatisticas': {
+                'blocos_validos': 0,
+                'blocos_invalidos': 0,
+                'ultimo_bloco': None,
+                'primeiro_bloco': None
+            }
+        }
+        
+        if not self.cadeia:
+            resultado['status'] = 'VAZIA'
+            resultado['erros'].append({
+                'tipo': 'CADEIA_VAZIA',
+                'mensagem': 'A blockchain está vazia'
+            })
+            return resultado
+        
+        # Verificar bloco gênese
+        bloco_genese = self.cadeia[0]
+        if bloco_genese.hash_anterior != '0' * 64:
+            resultado['erros'].append({
+                'bloco': 0,
+                'tipo': 'HASH_ANTERIOR_INVALIDO',
+                'mensagem': 'Bloco gênese com hash_anterior inválido',
+                'esperado': '0' * 64,
+                'encontrado': bloco_genese.hash_anterior
+            })
+        
+        # Verificar cada bloco
+        for i, bloco in enumerate(self.cadeia):
+            # 1. Verificar hash do bloco
+            hash_recalculado = bloco.calcular_hash()
+            if hash_recalculado != bloco.hash:
+                resultado['erros'].append({
+                    'bloco': i,
+                    'tipo': 'HASH_INVALIDO',
+                    'mensagem': f'Hash do bloco #{i} não confere',
+                    'esperado': bloco.hash,
+                    'encontrado': hash_recalculado,
+                    'dados': bloco.dados
+                })
+                resultado['estatisticas']['blocos_invalidos'] += 1
+            else:
+                resultado['estatisticas']['blocos_validos'] += 1
+            
+            # 2. Verificar encadeamento (exceto bloco gênese)
+            if i > 0:
+                bloco_anterior = self.cadeia[i-1]
+                if bloco.hash_anterior != bloco_anterior.hash:
+                    resultado['erros'].append({
+                        'bloco': i,
+                        'tipo': 'QUEBRA_ENCADEAMENTO',
+                        'mensagem': f'Quebra de encadeamento no bloco #{i}',
+                        'hash_anterior_esperado': bloco_anterior.hash,
+                        'hash_anterior_encontrado': bloco.hash_anterior
+                    })
+            
+            # 3. Verificar timestamp (ordem cronológica)
+            if i > 0:
+                bloco_anterior = self.cadeia[i-1]
+                if bloco.timestamp < bloco_anterior.timestamp:
+                    resultado['alertas'].append({
+                        'bloco': i,
+                        'tipo': 'TIMESTAMP_INCONSISTENTE',
+                        'mensagem': f'Timestamp do bloco #{i} é anterior ao bloco #{i-1}',
+                        'timestamp_atual': bloco.timestamp,
+                        'timestamp_anterior': bloco_anterior.timestamp
+                    })
+        
+        # 4. Verificar se há saltos de índice
+        for i, bloco in enumerate(self.cadeia):
+            if bloco.index != i:
+                resultado['alertas'].append({
+                    'bloco': i,
+                    'tipo': 'INDICE_INCONSISTENTE',
+                    'mensagem': f'Índice do bloco #{i} é {bloco.index}, esperado {i}'
+                })
+        
+        # Determinar status final
+        if resultado['erros']:
+            resultado['status'] = 'CORROMPIDA'
+        elif resultado['alertas']:
+            resultado['status'] = 'INCONSISTENTE'
+        
+        # Estatísticas
+        if self.cadeia:
+            resultado['estatisticas']['ultimo_bloco'] = {
+                'index': self.cadeia[-1].index,
+                'timestamp': self.cadeia[-1].timestamp,
+                'hash': self.cadeia[-1].hash
+            }
+            resultado['estatisticas']['primeiro_bloco'] = {
+                'index': self.cadeia[0].index,
+                'timestamp': self.cadeia[0].timestamp,
+                'hash': self.cadeia[0].hash
+            }
+        
+        return resultado
+    
+    def reparar_bloco(self, index: int) -> Tuple[bool, str]:
+        if index < 0 or index >= len(self.cadeia):
+            return False, f"❌ Bloco #{index} não encontrado"
+        
+        bloco = self.cadeia[index]
+        hash_anterior = bloco.hash
+        hash_recalculado = bloco.calcular_hash()
+        
+        if hash_recalculado == bloco.hash:
+            return False, f"ℹ️ Bloco #{index} já está íntegro"
+        
+        # Atualizar hash
+        bloco.hash = hash_recalculado
+        self._salvar()
+        
+        return True, f"Bloco #{index} reparado. Hash: {hash_recalculado[:16]}..."
+    
+    def exportar_relatorio_validacao(self, arquivo: Optional[str] = None) -> str:
+        resultado = self.validar_integridade_avancada()
+        
+        relatorio = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'resultado': resultado,
+            'detalhes_blocos': []
+        }
+        
+        for i, bloco in enumerate(self.cadeia):
+            relatorio['detalhes_blocos'].append({
+                'index': bloco.index,
+                'timestamp': bloco.timestamp,
+                'evento': bloco.dados.get('evento', 'N/A'),
+                'descricao': bloco.dados.get('descricao', 'N/A')[:50],
+                'usuario': bloco.dados.get('usuario', 'N/A'),
+                'hash': bloco.hash,
+                'hash_anterior': bloco.hash_anterior,
+                'valido': bloco.calcular_hash() == bloco.hash
+            })
+        
+        if arquivo:
+            with open(arquivo, 'w') as f:
+                json.dump(relatorio, f, indent=2, default=str)
+            print(f"Relatório salvo em: {arquivo}")
+        
+        return json.dumps(relatorio, indent=2, default=str)    
 
 def menu_principal():
     blockchain = BlockchainAuditoria()
