@@ -20,7 +20,7 @@ class AuthSystem:
     def _inicializar_arquivo_usuarios(self):
         if not os.path.exists(USERS_FILE):
             os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
-            senha_hash = self._hash_senha("admin")
+            senha_hash = self._hash_senha("Admin@2025")
             usuarios = {
                 "admin": {
                     "senha_hash": senha_hash.decode('utf-8'),
@@ -30,7 +30,7 @@ class AuthSystem:
             }
             with open(USERS_FILE, 'w') as f:
                 json.dump(usuarios, f, indent=2)
-            print("admin criado: admin / admin")
+            print("Usuario admin padrao criado: admin / Admin@2025")
     
     def _hash_senha(self, senha: str) -> bytes:
         salt = bcrypt.gensalt(rounds=12)
@@ -60,12 +60,12 @@ class AuthSystem:
             return False, "Senha deve ter pelo menos 6 caracteres"
         
         if perfil not in PERFIS:
-            return False, f"Perfil inválido. Use: {', '.join(PERFIS)}"
+            return False, f"Perfil invalido. Use: {', '.join(PERFIS)}"
         
         usuarios = self._carregar_usuarios()
         
         if username in usuarios:
-            return False, f"Usuário '{username}' já existe!"
+            return False, f"Usuario '{username}' ja existe!"
         
         senha_hash = self._hash_senha(senha)
         usuarios[username] = {
@@ -77,18 +77,18 @@ class AuthSystem:
         }
         
         self._salvar_usuarios(usuarios)
-        return True, f"Usuário '{username}' cadastrado com sucesso como {perfil}"
+        return True, f"Usuario '{username}' cadastrado com sucesso como {perfil}"
     
     def login(self, username: str, senha: str) -> Tuple[bool, str]:
         usuarios = self._carregar_usuarios()
         
         if username not in usuarios:
-            return False, "Usuário ou senha inválidos"
+            return False, "Usuario ou senha invalidos"
         
         usuario = usuarios[username]
         
         if not self._verificar_senha(senha, usuario["senha_hash"]):
-            return False, "Usuário ou senha inválidos"
+            return False, "Usuario ou senha invalidos"
         
         usuario["ultimo_login"] = datetime.datetime.now().isoformat()
         usuario["sessoes"].append({
@@ -129,45 +129,49 @@ class AuthSystem:
     
     def listar_usuarios(self) -> dict:
         if not self.is_admin():
-            return {"erro": "permissão apenas para admin"}
+            return {"erro": "Apenas administradores podem listar usuarios"}
         return self._carregar_usuarios()
     
     def remover_usuario(self, username: str) -> Tuple[bool, str]:
         if not self.is_admin():
-            return False, "permissão apenas para admin"
+            return False, "Apenas administradores podem remover usuarios"
         
         if username == "admin":
-            return False, "não é possível remover o usuário admin"
+            return False, "Nao e possivel remover o usuario admin"
         
         usuarios = self._carregar_usuarios()
         if username not in usuarios:
-            return False, f"Usuário '{username}' não encontrado"
+            return False, f"Usuario '{username}' nao encontrado"
         
         del usuarios[username]
         self._salvar_usuarios(usuarios)
-        return True, f"Usuário '{username}' removido com sucesso"
+        return True, f"Usuario '{username}' removido com sucesso"
 
 
 def menu_principal(auth: AuthSystem):
     while True:
+        print("\n" + "="*50)
+        print("  SECURECHAIN AUDIT - SISTEMA DE AUTENTICACAO")
+        print("="*50)
+        
         if auth.is_autenticado():
-            print(f"Usuário: {auth.get_usuario_atual()} ({auth.get_perfil_atual()})")
+            print(f"  Usuario: {auth.get_usuario_atual()} ({auth.get_perfil_atual()})")
             print("="*50)
             print("  1. Fazer Logout")
-            print("  2. Ver informações do usuário")
+            print("  2. Ver informacoes do usuario")
             if auth.is_admin():
-                print("  3. Listar usuários")
-                print("  4. Cadastrar novo usuário")
-                print("  5. Remover usuário")
+                print("  3. Listar usuarios")
+                print("  4. Cadastrar novo usuario")
+                print("  5. Remover usuario")
             print("  0. Sair")
         else:
-            print("Nenhum usuário logado")
+            print("  Nenhum usuario logado")
             print("="*50)
             print("  1. Fazer Login")
-            print("  2. Cadastrar novo usuário")
+            print("  2. Cadastrar novo usuario")
             print("  0. Sair")
         
-        opcao = input("\nEscolha uma opção: ").strip()
+        opcao = input("\nEscolha uma opcao: ").strip()
         
         if not auth.is_autenticado():
             if opcao == "1":
@@ -182,21 +186,22 @@ def menu_principal(auth: AuthSystem):
                 sucesso, msg = auth.cadastrar_usuario(username, senha, perfil)
                 print(msg)
             elif opcao == "0":
+                print("Saindo...")
                 break
             else:
-                print("Opção inválida")
+                print("Opcao invalida")
         
         else:
             if opcao == "1":
                 auth.logout()
             elif opcao == "2":
-                print(f"  Usuário: {auth.get_usuario_atual()}")
+                print(f"  Usuario: {auth.get_usuario_atual()}")
                 print(f"  Perfil: {auth.get_perfil_atual()}")
             elif opcao == "3" and auth.is_admin():
                 usuarios = auth.listar_usuarios()
-                print("\nLISTA DE USUÁRIOS:")
+                print("\nLISTA DE USUARIOS:")
                 for user, info in usuarios.items():
-                    print(f"  - {user} ({info['perfil']}) - Último login: {info.get('ultimo_login', 'Nunca')}")
+                    print(f"  - {user} ({info['perfil']}) - Ultimo login: {info.get('ultimo_login', 'Nunca')}")
             elif opcao == "4" and auth.is_admin():
                 username = input("Username: ").strip()
                 senha = input("Senha: ").strip()
@@ -204,14 +209,15 @@ def menu_principal(auth: AuthSystem):
                 sucesso, msg = auth.cadastrar_usuario(username, senha, perfil)
                 print(msg)
             elif opcao == "5" and auth.is_admin():
-                username = input("Username para remover: ").strip()
+                username = input("Username pra remover: ").strip()
                 sucesso, msg = auth.remover_usuario(username)
                 print(msg)
             elif opcao == "0":
                 auth.logout()
+                print("Saindo...")
                 break
             else:
-                print("Opção inválida ou sem permissão")
+                print("Opcao invalida ou sem permissao")
 
 
 if __name__ == "__main__":
